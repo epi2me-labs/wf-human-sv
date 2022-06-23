@@ -119,7 +119,7 @@ def main():
         if detected_read_support > args.min_read_support_limit:
             min_read_support = detected_read_support
 
-    filter_min_read_support = f'INFO/RE >= {min_read_support}'
+    filter_min_read_support = f'INFO/SUPPORT >= {min_read_support}'
 
     # Build filter string
     filters = [

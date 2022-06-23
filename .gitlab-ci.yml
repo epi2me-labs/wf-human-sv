@@ -3,10 +3,38 @@ include:
     - project: "epi2melabs/ci-templates"
       file: "wf-containers.yaml"
 
+docker-run:
+    # Define a 1D job matrix to inject a variable named MATRIX_NAME into
+    #   the CI environment, we can use the value of MATRIX_NAME to determine
+    #   which options to apply as part of the rules block below
+    # NOTE There is a slightly cleaner way to define this matrix to include
+    #   the variables, but it is broken when using long strings! See CW-756
+    parallel:
+        matrix:
+            - MATRIX_NAME: ["benchmark", "nobenchmark", "bam"]
+    rules:
+        # NOTE As we're overriding the rules block for the included docker-run
+        #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
+        #   being incorrectly scheduled for "detached merge request pipelines" etc.
+        - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
+          when: never
+        - if: $MATRIX_NAME == "benchmark"
+          variables:
+              NF_WORKFLOW_OPTS: "--fastq demo_data/reads.fastq.gz --reference demo_data/chr20_human_g1k_v37_part.fasta.gz --target_bedfile demo_data/target.bed --tr_bedfile demo_data/human_hs37d5.trf.bed --benchmark"
+              NF_IGNORE_PROCESSES: "getAllChromosomesBed"
+        - if: $MATRIX_NAME == "nobenchmark"
+          variables:
+              NF_WORKFLOW_OPTS: "--fastq demo_data/reads.fastq.gz --reference demo_data/chr20_human_g1k_v37_part.fasta.gz --target_bedfile demo_data/target.bed --tr_bedfile demo_data/human_hs37d5.trf.bed"
+              NF_IGNORE_PROCESSES: "getAllChromosomesBed,excludeNonIndels,getTruthset,intersectBedWithTruthset,truvari"
+        - if: $MATRIX_NAME == "bam"
+          variables:
+              NF_WORKFLOW_OPTS: "--bam demo_data/test.bam --reference demo_data/chr20_human_g1k_v37_part.fasta.gz --target_bedfile demo_data/target.bed --tr_bedfile demo_data/human_hs37d5.trf.bed"
+              NF_IGNORE_PROCESSES: "getAllChromosomesBed,excludeNonIndels,getTruthset,intersectBedWithTruthset,truvari,combineFilterFastq,mapMM2"
+
 variables:
-    # Workflow inputs given to nextflow.
-    # The workflow should define `--out_dir`, the CI template sets this.
-    # Only common file inputs and option values need to be given here
-    # (not things such as -profile)
-    NF_WORKFLOW_OPTS: "--fastq test_data/reads.fastq.gz --reference test_data/chr20_human_g1k_v37_part.fasta.gz --target_bedfile test_data/target.bed --benchmark"
+    # NOTE Still need to define NF_WORKFLOW_OPTS et al here for conda-run and aws-run
+    NF_WORKFLOW_OPTS: "--fastq demo_data/reads.fastq.gz --reference demo_data/chr20_human_g1k_v37_part.fasta.gz --target_bedfile demo_data/target.bed --tr_bedfile demo_data/human_hs37d5.trf.bed --benchmark"
+    NF_IGNORE_PROCESSES: "getAllChromosomesBed"
+    NF_BEFORE_SCRIPT: |
+        wget -O demo_data.tar.gz https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-human-sv/demo_data.tar.gz && tar -xzvf demo_data.tar.gz
  

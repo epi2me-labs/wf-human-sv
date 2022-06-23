@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-human-sv",
-    "description": "Structural variation workflow (and benchmarking) using lra and cuteSV.",
+    "description": "Structural variation workflow (and benchmarking) using sniffles2.",
     "url": "https://github.com/epi2me-labs/wf-human-sv",
     "type": "object",
     "definitions": {
@@ -56,6 +56,11 @@
                     "type": "boolean",
                     "description": "Use additional heuristics to identify barcodes from file paths",
                     "help_text": "Enabling this option will group together files into samples by the presence of strings of the form `barcodeXXX` present in filenames, rather than simply files grouped into directories (as output by MinKNOW and the Guppy basecaller)."
+                },
+                "tr_bedfile": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "Input .bed file containing tandem repeat annotations for the reference genome. Improves accuracy in our benchmarking."
                 }
             },
             "required": [
@@ -102,11 +107,6 @@
             "fa_icon": "fas fa-dna",
             "description": "Algorithm options",
             "properties": {
-                "max_bp": {
-                    "type": "integer",
-                    "default": 0,
-                    "description": "Maximum BP to use per sample (0 is all)"
-                },
                 "min_len": {
                     "type": "integer",
                     "default": 200,
@@ -142,30 +142,15 @@
                     "default": 2,
                     "description": "Minimum read depth needed to retain an SV call"
                 },
-                "max_cluster_bias_INS": {
-                    "type": "integer",
-                    "default": 100,
-                    "hidden": true
-                },
-                "diff_ratio_merging_INS": {
-                    "type": "number",
-                    "default": 0.3,
-                    "hidden": true
-                },
-                "max_cluster_bias_DEL": {
-                    "type": "integer",
-                    "default": 200,
-                    "hidden": true
-                },
-                "diff_ratio_merging_DEL": {
-                    "type": "number",
-                    "default": 0.5,
-                    "hidden": true
-                },
                 "sv_types": {
                     "type": "string",
                     "default": "DEL,INS",
                     "hidden": true
+                },
+                "cluster_merge_pos": {
+                    "type": "integer",
+                    "default": 150,
+                    "description": "Max merging distance for insertions and deletions on the same read and cluster in non-repeat regions"
                 }
             }
         },
@@ -232,7 +217,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThe pipeline performs the following steps:\n* Maps reads using [lra](https://github.com/ChaissonLab/LRA)\n* Calls variants using [cuteSV](https://github.com/tjiangHIT/cuteSV)\n* Filters variants by minimum/maximum length, read support, or type (e.g. insertion, deletion, etc.)\n* Optionally evaluates yours calls against a truthset using [truvari](https://github.com/spiralgenetics/truvari)\n",
+        "intro": "## Introduction\n\nThe pipeline performs the following steps:\n* Maps reads using [minimap2](https://github.com/lh3/minimap2)\n* Calls variants using [sniffles2](https://github.com/fritzsedlazeck/Sniffles)\n* Filters variants by minimum/maximum length, read support, or type (e.g. insertion, deletion, etc.)\n* Optionally evaluates yours calls against a truthset using [truvari](https://github.com/spiralgenetics/truvari)\n",
         "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [conda](https://docs.conda.io/en/latest/miniconda.html)"
     }
 }

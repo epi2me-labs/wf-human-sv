@@ -125,6 +125,9 @@ def main():
         "--params", default=None, required=True,
         help="A csv containing the parameter key/values")
     parser.add_argument(
+        "--params-hidden", default="",
+        help="Comma delimited list of keys to hide from parameters table")
+    parser.add_argument(
         "--versions", required=True,
         help="directory contained CSVs containing name,version.")
     args = parser.parse_args()
@@ -285,10 +288,12 @@ def main():
         "The table below highlights values of"
         " the main parameters used in this analysis.")
     params = []
+    hidden_params = args.params_hidden.split(',')
     with open(args.params) as f:
         params_data = json.load(f)
     for key, value in params_data.items():
-        params.append((key, value))
+        if key not in hidden_params:
+            params.append((key, value))
     df_params = pd.DataFrame(params, columns=['Key', 'Value'])
     section.table(
         df_params, sortable=False, paging=False, index=False, searchable=False)
