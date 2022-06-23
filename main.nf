@@ -27,96 +27,70 @@ process combineFilterFastq {
 }
 
 
-process indexLRA {
-    label "wf_human_sv"
-    cpus 1
-    input:
-        file reference
-    output:
-        path "${reference.simpleName}", emit: ref
-        path "${reference.simpleName}.gli", emit: lra_index
-        path "${reference.simpleName}.mmi", emit: mmi_index
-    script:
-        def simpleRef = reference.simpleName
-    """
-    cp -L $reference $simpleRef
-    if [[ $reference == *.gz ]]
-    then
-        rm $reference
-        mv $simpleRef ${simpleRef}.gz
-        gunzip ${simpleRef}.gz
-    fi
-    lra index -ONT $simpleRef
-    """
-}
-
-
-process mapLRA {
+process mapMM2 {
     label "wf_human_sv"
     cpus params.threads
     input:
         file reference
-        file lra_index
-        file mmi_index
         file reads
     output:
-        path "*lra.bam", emit: bam
-        path "*lra.bam.bai", emit: bam_index
+        path "*bam", emit: bam
+        path "*bam.bai", emit: bam_index
     script:
         def name = reads.simpleName
     """
-    catfishq -r $reads --max_mbp $params.max_bp \
-    | seqtk seq -A - \
-    | lra align -ONT -t $task.cpus $reference - -p s \
+    minimap2 -y -t $task.cpus -ax map-ont $reference $reads \
     | samtools addreplacerg -r \"@RG\tID:$name\tSM:$name\" - \
-    | samtools sort -@ $task.cpus -o ${name}.lra.bam -
-    samtools index -@ $task.cpus ${name}.lra.bam
+    | samtools sort -@ $task.cpus -o ${name}.mm2.bam -
+    samtools index -@ $task.cpus ${name}.mm2.bam
     """
 }
 
 
-process cuteSV {
+// Remove unmapped (4), non-primary (256) and supplemental (2048) alignments
+process filterBam {
     label "wf_human_sv"
     cpus params.threads
     input:
         file bam
         file bam_index
-        file reference
     output:
-        path "*.cutesv.vcf", emit: vcf
+        path "*filtered.bam", emit: bam
+        path "*filtered.bam.bai", emit: bam_index
     script:
         def name = bam.simpleName
-        def simpleRef = reference.simpleName
     """
-    # In case of --bam, repeat the gzip check
-    REF=$reference
-    if [[ $reference == *.gz ]]
-    then
-        cp -L $reference $simpleRef
-        rm $reference
-        mv $simpleRef ${simpleRef}.gz
-        gunzip ${simpleRef}.gz
-        REF=$simpleRef
-    fi
+    samtools view -@ $task.cpus -F 2308 -o ${name}.filtered.bam ${bam}
+    samtools index ${name}.filtered.bam
+    """
+}
 
-    cuteSV \
+
+// NOTE VCF entries for alleles with no support are removed to prevent them from
+//      breaking downstream parsers that do not expect them
+process sniffles2 {
+    label "wf_human_sv"
+    cpus params.threads
+    input:
+        file bam
+        file bam_index
+        file tr_bed
+    output:
+        path "*.sniffles.vcf", emit: vcf
+    script:
+        def name = bam.simpleName
+        def tr_arg = tr_bed.name != 'OPTIONAL_FILE' ? "--tandem-repeats ${tr_bed}" : ''
+    """
+    sniffles \
         --threads $task.cpus \
-        --sample $name \
-        --retain_work_dir \
-        --report_readid \
-        --genotype \
-        --min_size $params.min_sv_length \
-        --max_size $params.max_sv_length \
-        --min_support $params.min_read_support_limit \
-        --max_cluster_bias_INS $params.max_cluster_bias_INS \
-        --diff_ratio_merging_INS $params.diff_ratio_merging_INS \
-        --max_cluster_bias_DEL $params.max_cluster_bias_DEL \
-        --diff_ratio_merging_DEL $params.diff_ratio_merging_DEL \
-        $bam \
-        \$REF \
-        ${name}.cutesv.vcf \
-        .
-	"""
+        --sample-id $name \
+        --output-rnames \
+        --cluster-merge-pos $params.cluster_merge_pos \
+        --input $bam \
+        $tr_arg \
+        --vcf ${name}.sniffles.vcf
+    sed -i '/.:0:0:0:NULL/d' ${name}.sniffles.vcf
+    """
 }
 
 
@@ -322,16 +296,17 @@ process getVersions {
         path "versions.txt"
     script:
     """
+    trap '' PIPE # suppress SIGPIPE without interfering with pipefail
     python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
     TRUVARI=\$(which truvari)
     python \$TRUVARI version | sed 's/ /,/' >> versions.txt
     mosdepth --version | sed 's/ /,/' >> versions.txt
     fastcat --version | sed 's/^/fastcat,/' >> versions.txt
-    cuteSV --version | head -n 1 | sed 's/ /,/' >> versions.txt
+    sniffles --version | head -n 1 | sed 's/ Version //' >> versions.txt
     bcftools --version | head -n 1 | sed 's/ /,/' >> versions.txt
     bedtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
     samtools --version | head -n 1 | sed 's/ /,/' >> versions.txt
-    echo `lra -v | head -n 2 | tail -1 | cut -d ':' -f 2 | sed 's/ /lra,/'` >> versions.txt
+    minimap2 --version | head -n 1 | sed 's/^/minimap2,/' >> versions.txt
     echo `seqtk 2>&1 | head -n 3 | tail -n 1 | cut -d ':' -f 2 | sed 's/ /seqtk,/'` >> versions.txt
     """
 }
@@ -375,10 +350,11 @@ process report {
         $readStats \
         --read_depth $read_depth \
         --params params.json \
+        --params-hidden 'help,schema_ignore_params,${params.schema_ignore_params}' \
         --versions $versions \
-        --revision $workflow.revision \
-        --commit $workflow.commitId \
-        $evalResults 
+        --revision ${workflow.revision} \
+        --commit ${workflow.commitId} \
+        $evalResults
     """
 }
 
@@ -408,14 +384,13 @@ workflow readAlign {
         target
     main:
         samples = combineFilterFastq(samples)
-        indexLRA(reference)
-        mapLRA(indexLRA.out.ref, indexLRA.out.lra_index, indexLRA.out.mmi_index, samples.filtered)
+        mapped = mapMM2(reference, samples.filtered)
     emit:
         reads = samples.filtered
         read_stats = samples.stats
-        ref = indexLRA.out.ref
-        bam = mapLRA.out.bam
-        bam_index = mapLRA.out.bam_index
+        ref = reference
+        bam = mapped.bam
+        bam_index = mapped.bam_index
 }
 
 
@@ -425,10 +400,20 @@ workflow variantCall {
         bai
         reference
         target_bed
+        optional_file
     main:
-        cuteSV(bam, bai, reference)
-        mosdepth(bam, bai, target_bed)
-        filterCalls(cuteSV.out.vcf, mosdepth.out.mosdepth_bed, target_bed)
+
+        // tandom_repeat bed
+        if(params.tr_bedfile == null) {
+            tr_bed = optional_file
+        } else {
+            tr_bed = Channel.fromPath(params.tr_bedfile, checkIfExists: true)
+        }
+
+        filterBam(bam, bai)
+        sniffles2(filterBam.out.bam, filterBam.out.bam_index, tr_bed)
+        mosdepth(filterBam.out.bam, filterBam.out.bam_index, target_bed)
+        filterCalls(sniffles2.out.vcf, mosdepth.out.mosdepth_bed, target_bed)
         sortVCF(filterCalls.out.vcf)
         indexVCF(sortVCF.out.vcf)
     emit:
@@ -493,7 +478,7 @@ workflow fastq {
         println("Running workflow | .fq input | standard mode.")
         aligned = readAlign(samples, reference, target)
         called = variantCall(aligned.bam, aligned.bam_index,
-            aligned.ref, target)
+            aligned.ref, target, optional_file)
         report = runReport(
             called.vcf.collect(),
             aligned.read_stats.collect(),
@@ -518,7 +503,7 @@ workflow bam {
     main:
         println("==============================================")
         println("Running workflow | .bam input | standard mode.")
-        called = variantCall(bam, bam_index, reference, target)
+        called = variantCall(bam, bam_index, reference, target, optional_file)
         report = runReport(
             called.vcf.collect(),
             [],
@@ -538,12 +523,13 @@ workflow benchmark_fastq {
         samples
         reference
         target
+        optional_file
     main:
         println("==============================================")
         println("Running workflow | .fq input | benchmark mode.")
         aligned = readAlign(samples, reference, target)
         called = variantCall(aligned.bam, aligned.bam_index,
-            aligned.ref, target)
+            aligned.ref, target, optional_file)
         benchmark = runBenchmark(called.vcf, aligned.ref, target)
         report = runReport(
             called.vcf.collect(),
@@ -569,7 +555,7 @@ workflow benchmark_bam {
     main:
         println("==============================================")
         println("Running workflow | .bam input | benchmark mode.")
-        called = variantCall(bam, bam_index, reference, target)
+        called = variantCall(bam, bam_index, reference, target, optional_file)
         benchmark = runBenchmark(called.vcf, reference, target)
         report = runReport(
             called.vcf.collect(),
@@ -630,7 +616,13 @@ workflow {
             exit 1
         }
         println('Checking .bai')
-        bai = file(params.bai, type: "file")
+        if(params.bai){
+            bai = file(params.bai, type: "file")
+        }
+        else {
+            // Use default location if params.bai is not provided
+            bai = file(params.bam + '.bai', type: "file")
+        }
         if (!bai.exists()) {
             println("--bai: File doesn't exist, check path.")
             exit 1
@@ -647,7 +639,7 @@ workflow {
             params.sample_sheet, params.sanitize_fastq
         )
         if (params.benchmark) {
-            results = benchmark_fastq(samples, reference, target)
+            results = benchmark_fastq(samples, reference, target, OPTIONAL)
         } else {
             results = fastq(samples, reference, target, OPTIONAL)
         }

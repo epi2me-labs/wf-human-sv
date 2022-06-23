@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased]
 ### Changed
 - Better help text on cli
+- `--bai` no longer needs to be provided with `--bam` if in the standard location (`<bam_path>.bai`)
+- Replaced `lra/cutesv` workflow with `minimap2/sniffles2`
+### Added
+- `--tr_bedfile` option to provide a tandem repeat BED for your reference to improve the accuracy of SV calling
+### Removed
+- Test data is now hosted in AWS S3
 
 ## [v0.0.6]
 ### added
