@@ -45,6 +45,7 @@
                 "out_dir": {
                     "type": "string",
                     "default": "output",
+                    "format": "directory-path",
                     "description": "Directory for output of all user-facing files."
                 },
                 "report_name": {
@@ -80,7 +81,6 @@
                 },
                 "target_bedfile": {
                     "type": "string",
-                    "default": "NO_TARGET",
                     "description": "BED file, SVs will only be called in these regions"
                 },
                 "truthset_vcf": {
@@ -199,7 +199,7 @@
         },
         "wfversion": {
             "type": "string",
-            "default": "v0.0.6",
+            "default": "v1.0.0",
             "hidden": true
         },
         "monochrome_logs": {
