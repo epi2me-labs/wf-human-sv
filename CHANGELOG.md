@@ -4,15 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v1.0.0]
 ### Changed
-- Better help text on cli
+- Improved `--help` command
+- Improved robustness of `fastq_ingress` utility
 - `--bai` no longer needs to be provided with `--bam` if in the standard location (`<bam_path>.bai`)
 - Replaced `lra/cutesv` workflow with `minimap2/sniffles2`
 ### Added
 - `--tr_bedfile` option to provide a tandem repeat BED for your reference to improve the accuracy of SV calling
 ### Removed
 - Test data is now hosted in AWS S3
+### Fixed
+- Set `out_dir` option format to ensure output is written to correct directory on Windows
+- Prevent pipeline from stalling on Launcher when not providing a `--target_bedfile`
 
 ## [v0.0.6]
 ### added

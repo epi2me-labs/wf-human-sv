@@ -591,18 +591,19 @@ workflow {
     }
 
     // Check for target bedfile
-    if (params.target_bedfile === 'NO_TARGET') {
-        target = getAllChromosomesBed(reference).all_chromosomes_bed
-    } else {
+    if (params.target_bedfile) {
         target = file(params.target_bedfile, type: "file")
         if (!target.exists()) {
             println("--target_bedfile: File doesn't exist, check path.")
         }
+    } else {
+        println("--target_bedfile: Generating target BED from reference.")
+        target = getAllChromosomesBed(reference).all_chromosomes_bed
     }
 
     // Check min_read_support
     min_read_support = params.min_read_support
-    if (!min_read_support.toString().isInteger() && min_read_support !== 'auto') {
+    if (!min_read_support.toString().isInteger() && min_read_support != 'auto') {
         println("--min_read_support: Must be integer or 'auto'.")
         exit 1
     }
@@ -634,10 +635,13 @@ workflow {
         }
         output(results)
     } else {
-        samples = fastq_ingress(
-            params.fastq, params.out_dir, params.sample,
-            params.sample_sheet, params.sanitize_fastq
-        )
+        samples = fastq_ingress([
+            "input":params.fastq,
+            "sample":params.sample,
+            "sample_sheet":params.sample_sheet,
+            "sanitize": params.sanitize_fastq,
+            "output":params.out_dir])
+
         if (params.benchmark) {
             results = benchmark_fastq(samples, reference, target, OPTIONAL)
         } else {
