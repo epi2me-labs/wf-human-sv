@@ -11,18 +11,18 @@ process combineFilterFastq {
     label "wf_human_sv"
     cpus 1
     input:
-        tuple path(directory), val(sample_name), val(sample_type)
+        tuple path(directory), val(meta)
     output:
-        path "${sample_name}.fastq", emit: filtered
-        path "${sample_name}.stats", emit: stats
+        path "${meta.sample_name}.fastq", emit: filtered
+        path "${meta.sample_name}.stats", emit: stats
     """
     fastcat \
         -a $params.min_len \
         -b $params.max_len \
         -q $params.min_qual \
-        -s ${sample_name} \
-        -r ${sample_name}.stats \
-        -x ${directory} > ${sample_name}.fastq
+        -s ${meta.sample_name} \
+        -r ${meta.sample_name}.stats \
+        -x ${directory} > ${meta.sample_name}.fastq
     """
 }
 
@@ -176,7 +176,7 @@ process indexVCF {
 
 // The following processes are for the benchmarking
 // pathway of this pipeline. Please see the documentation
-// for further details. 
+// for further details.
 process getTruthset {
     label "wf_human_sv"
     cpus 1
@@ -437,7 +437,7 @@ workflow runReport {
             read_stats.collect(),
             depth_bed.collect(),
             eval_json,
-            software_versions, 
+            software_versions,
             workflow_params)
     emit:
         html = report.out.html
@@ -649,6 +649,5 @@ workflow {
         }
         output(results)
     }
-    
-}
 
+}
